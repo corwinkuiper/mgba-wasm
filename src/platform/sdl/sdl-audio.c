@@ -91,6 +91,14 @@ void mSDLResumeAudio(struct mSDLAudio* context) {
 #endif
 }
 
+double calculate_dynamic_rate_ratio(
+	double maximum_drift,
+	double current_buffer_fill,
+	double maximum_buffer_size
+) {
+	return 1. - maximum_drift + 2. * current_buffer_fill / maximum_buffer_size * maximum_drift;
+}
+
 static void _mSDLAudioCallback(void* context, Uint8* data, int len) {
 	struct mSDLAudio* audioContext = context;
 	if (!context || !audioContext->core) {
@@ -112,13 +120,12 @@ static void _mSDLAudioCallback(void* context, Uint8* data, int len) {
 		}
 		mCoreSyncLockAudio(audioContext->sync);
 	}
-#ifdef __EMSCRIPTEN__
-	fauxClock = GBAAudioCalculateRatio(1, 60, 1);
-#endif
-	blip_set_rates(left, clockRate, audioContext->obtainedSpec.freq * fauxClock);
-	blip_set_rates(right, clockRate, audioContext->obtainedSpec.freq * fauxClock);
 	len /= 2 * audioContext->obtainedSpec.channels;
+	double ratio = calculate_dynamic_rate_ratio(0.005, blip_samples_avail(left), len * 2.);
+	blip_set_rates(left, clockRate, audioContext->obtainedSpec.freq * fauxClock / ratio);
+	blip_set_rates(right, clockRate, audioContext->obtainedSpec.freq * fauxClock / ratio);
 	int available = blip_samples_avail(left);
+	printf("Ratio: %f, available: %d, len: %d\n", ratio, available, len);
 	if (available > len) {
 		available = len;
 	}
